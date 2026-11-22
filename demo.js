@@ -13,6 +13,7 @@
       { T: 2.9, kC: 40, tC: 31, tF: -33 }, { T: 3.0, kC: 53, tC: 23, tF: -19 }, { T: 3.0, kC: 51, tC: 26, tF: -22 },
       { T: 2.95, kC: 55, tC: 22, tF: -18 }
     ];
+    var bR = [0.07, 0.075, 0.08, 0.12, 0.10, 0.105, 0.11]; // 背中の丸み（後半ほど丸くなる設定）
     var l = 0.45, trunkLen = 0.55, upper = 0.3, fore = 0.28, scale = 330, ox = 600, oy = 470, dir = 1;
     var frames = [], t0 = 0, si = 0, tt = 0, total = plan.reduce(function (s, p) { return s + p.T; }, 0);
     for (var i = 0; i < Math.floor(total * fps); i++) {
@@ -46,7 +47,15 @@
         lm[SIDE.L[key]] = px(0, 0.95); lm[SIDE.R[key]] = px(-8, 0.55);
       });
       lm[0] = { x: lm[7].x + 0.012, y: lm[7].y + 0.01, visibility: 0.9 };
-      frames.push({ t: Math.round(tt * 1000) / 1000, lm: lm });
+      // 背中の輪郭（合成）：腰→肩の軸から背中側までの距離。キャッチに近いほど丸みを大きくする
+      var hx = (lm[23].x + lm[24].x) / 2 * W, hy = (lm[23].y + lm[24].y) / 2 * H, sx = (lm[11].x + lm[12].x) / 2 * W, sy = (lm[11].y + lm[12].y) / 2 * H;
+      var Lp = Math.hypot(sx - hx, sy - hy), b = bR[si] * (1 - 0.6 * body), dp = [], dm = [];
+      for (var kk = 0; kk < 41; kk++) {
+        var uu = kk / 40;
+        dp.push(Math.round((Lp * (0.17 - 0.07 * uu) + b * Lp * Math.sin(Math.PI * Math.min(1, uu / 0.95)) + (rand() - 0.5) * 1.5) * 10) / 10);
+        dm.push(Math.round(Lp * (0.12 - 0.02 * uu) * 10) / 10);
+      }
+      frames.push({ t: Math.round(tt * 1000) / 1000, lm: lm, back: { hx: hx, hy: hy, sx: sx, sy: sy, dp: dp, dm: dm } });
     }
     return { frames: frames, W: W, H: H, fps: fps, erg: { railY: (oy - 0.12 * scale + 22) / H, footX: ox / W, dir: dir } };
   }
