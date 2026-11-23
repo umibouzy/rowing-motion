@@ -284,6 +284,18 @@
     ['backLow', 'backUp', 'backRound'].forEach(function (k) { S[k] = smooth(fillGaps(S[k], Math.round(0.2 * fps)), win); });
     var around = function (arr, c) { return mean(arr.slice(Math.max(0, c - 2), c + 3)); };
 
+    // シート（腰）とハンドル（手首）の水平速度。＋がドライブ方向（足から離れる向き）
+    // 縮尺：身長があれば「股関節〜足首 ≒ 身長×0.491」から1画素あたりのメートルを求める。なければ脚の長さ＝1とした相対値
+    var hasScale = opts.height > 0.5 && opts.height < 2.6;
+    var unit = hasScale ? 0.491 * opts.height / legLen : 1 / legLen;
+    S.seatV = []; S.handV = [];
+    for (i = 0; i < n; i++) {
+      var i0 = Math.max(0, i - 1), i1 = Math.min(n - 1, i + 1), dtt = t[i1] - t[i0];
+      S.seatV.push(dtt > 0 ? -dir * (J.hip.x[i1] - J.hip.x[i0]) / dtt * unit : NaN);
+      S.handV.push(dtt > 0 ? -dir * (J.wr.x[i1] - J.wr.x[i0]) / dtt * unit : NaN);
+    }
+    S.seatV = smooth(S.seatV, win); S.handV = smooth(S.handV, win);
+
     var catches = detectCatches(S.seat, t, 1.0, S.knee);
     var w = Math.max(1, Math.round(0.15 * fps));
     var strokes = [];
@@ -344,6 +356,16 @@
         trunkAtArms: jA >= 0 ? trunkOpen(jA) * 100 : NaN,
         bodyPrepAtKnee: (jK >= 0 && isFinite(trunkRefNext)) ? clamp01((S.trunk[jK] - trunkMin) / (trunkRefNext - trunkMin)) * 100 : NaN,
         catchRound: around(S.backRound, ci),
+        seatPeak: S.seatV[argExt(S.seatV, ci, fi, true)],
+        seatPeakPct: (t[argExt(S.seatV, ci, fi, true)] - t[ci]) / (t[fi] - t[ci]) * 100,
+        handPeak: S.handV[argExt(S.handV, ci, fi, true)],
+        seatRecPeak: -S.seatV[argExt(S.seatV, fi, cn, false)],
+        seatTravel: (function () { var mx = -Infinity; for (var q = ci; q <= cn; q++) { var v = -dir * (J.hip.x[q] - J.hip.x[ci]); if (v > mx) mx = v; } return mx * unit; })(),
+        earlyRatio: (function () {
+          var e = ci + Math.max(2, Math.round((fi - ci) * 0.25)), ms = mean(S.seatV.slice(ci, e + 1)), mh = mean(S.handV.slice(ci, e + 1));
+          var pk = S.seatV[argExt(S.seatV, ci, fi, true)];
+          return ms > 0.1 * pk ? mh / ms : NaN;
+        })(),
         catchBackLow: around(S.backLow, ci),
         catchBackUp: around(S.backUp, ci),
         catchBend: around(S.backUp, ci) - around(S.backLow, ci),
@@ -351,7 +373,7 @@
       });
     }
 
-    var METRICS = ['rate', 'drive', 'recovery', 'ratio', 'catchTrunk', 'finishTrunk', 'trunkRange', 'catchKnee', 'catchShin', 'catchHip', 'legsAtTrunk', 'trunkOpenHalf', 'trunkOpenHalfPct', 'trunkAtArms', 'bodyPrepAtKnee', 'catchRound', 'catchBackLow', 'catchBackUp', 'catchBend'];
+    var METRICS = ['rate', 'drive', 'recovery', 'ratio', 'catchTrunk', 'finishTrunk', 'trunkRange', 'catchKnee', 'catchShin', 'catchHip', 'legsAtTrunk', 'trunkOpenHalf', 'trunkOpenHalfPct', 'trunkAtArms', 'bodyPrepAtKnee', 'catchRound', 'catchBackLow', 'catchBackUp', 'catchBend', 'seatPeak', 'seatPeakPct', 'handPeak', 'seatRecPeak', 'seatTravel', 'earlyRatio'];
     var summary = {};
     METRICS.forEach(function (m) {
       var v = strokes.map(function (s) { return s[m]; });
@@ -360,12 +382,12 @@
 
     return {
       t: t, fps: fps, duration: dur, side: side, mode: mode, dir: dir, legLen: legLen,
-      detectRate: n ? detected / n : 0, joints: J, hasBack: hasBack, series: S, catches: catches,
+      detectRate: n ? detected / n : 0, joints: J, hasBack: hasBack, hasScale: hasScale, series: S, catches: catches,
       strokes: strokes, summary: summary, metrics: METRICS
     };
   }
 
-  var api = { analyze: analyze, backProfile: backProfile, backPoints: backPoints, backMetrics: backMetrics, angle3: angle3, SIDE: SIDE, KEYS: KEYS, mean: mean, sd: sd, median: median };
+  var api = { VERSION: '0.4.0', analyze: analyze, backProfile: backProfile, backPoints: backPoints, backMetrics: backMetrics, angle3: angle3, SIDE: SIDE, KEYS: KEYS, mean: mean, sd: sd, median: median };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ErgAnalysis = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
